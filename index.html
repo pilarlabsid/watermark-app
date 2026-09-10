@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WatermarkPro — Tambah Tanggal, Jam & Lokasi ke Foto</title>
+  <meta name="description" content="Aplikasi web gratis untuk menambahkan watermark tanggal, jam, dan lokasi GPS ke foto Anda secara otomatis. Unduh hasil langsung di browser." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="header-brand">
+      <div class="brand-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+          <polyline points="21 15 16 10 5 21"/>
+        </svg>
+      </div>
+      <span class="brand-name">Watermark<span class="brand-accent">Pro</span></span>
+    </div>
+    <div class="header-actions">
+      <button class="btn-ghost" id="btn-help">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        Bantuan
+      </button>
+    </div>
+  </header>
+
+  <main class="app-layout">
+    <section class="preview-section">
+      <div class="section-header">
+        <h1 class="section-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+          Foto &amp; Preview
+        </h1>
+        <div class="batch-info" id="batch-info" style="display:none;">
+          <span id="batch-count">0 foto</span> dipilih
+        </div>
+      </div>
+
+      <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Area upload foto">
+        <div class="dropzone-content" id="dropzone-content">
+          <div class="dropzone-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </div>
+          <p class="dropzone-title">Seret &amp; Lepas Foto</p>
+          <p class="dropzone-sub">atau <button class="btn-link" id="btn-browse">pilih dari perangkat</button></p>
+          <p class="dropzone-hint">JPG, PNG, WebP &bull; Maksimal 20MB per file &bull; Bisa pilih banyak foto</p>
+        </div>
+        <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp" multiple hidden />
+      </div>
+
+      <div class="canvas-wrapper" id="canvas-wrapper" style="display:none;">
+        <div class="canvas-nav">
+          <button class="btn-icon" id="btn-prev" disabled aria-label="Foto sebelumnya">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <span class="canvas-nav-label" id="nav-label">1 / 1</span>
+          <button class="btn-icon" id="btn-next" disabled aria-label="Foto berikutnya">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+        <canvas id="preview-canvas"></canvas>
+        <div class="canvas-actions">
+          <button class="btn-secondary" id="btn-reset">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.4"/></svg>
+            Ganti Foto
+          </button>
+          <button class="btn-primary" id="btn-download-single">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Unduh Foto Ini
+          </button>
+          <button class="btn-primary btn-accent" id="btn-download-all" style="display:none;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Unduh Semua
+          </button>
+        </div>
+      </div>
+
+      <div class="thumbnail-strip" id="thumbnail-strip" style="display:none;"></div>
+    </section>
+
+    <aside class="settings-panel">
+      <div class="settings-scroll">
+
+        <div class="settings-card">
+          <div class="card-header">
+            <div class="card-icon card-icon--blue">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+            </div>
+            <h2 class="card-title">Tanggal &amp; Waktu</h2>
+            <label class="toggle-switch" aria-label="Aktifkan tanggal dan waktu">
+              <input type="checkbox" id="toggle-datetime" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="card-body" id="datetime-body">
+            <div class="form-group">
+              <label class="form-label">Mode Tanggal</label>
+              <div class="radio-group">
+                <label class="radio-option">
+                  <input type="radio" name="date-mode" value="auto" checked id="date-auto" />
+                  <span class="radio-label">Otomatis (sekarang)</span>
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="date-mode" value="exif" id="date-exif" />
+                  <span class="radio-label">Dari EXIF foto</span>
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="date-mode" value="custom" id="date-custom" />
+                  <span class="radio-label">Kustom</span>
+                </label>
+              </div>
+            </div>
+            <div class="form-group" id="custom-datetime-group" style="display:none;">
+              <label class="form-label" for="custom-datetime">Tanggal &amp; Waktu Kustom</label>
+              <input type="datetime-local" id="custom-datetime" class="form-input" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="date-format">Format Tampilan</label>
+              <select id="date-format" class="form-select">
+                <option value="DD MMM YYYY HH:mm TZ">10 Sep 2026 09:37 WIB</option>
+                <option value="DD MMM YYYY HH:mm">10 Sep 2026 09:37</option>
+                <option value="DD/MM/YYYY HH:mm">10/09/2026 09:37</option>
+                <option value="YYYY-MM-DD HH:mm">2026-09-10 09:37</option>
+                <option value="DD MMM YYYY HH:mm:ss">10 Sep 2026 09:37:29</option>
+                <option value="dddd, DD MMM YYYY">Kamis, 10 Sep 2026</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="card-header">
+            <div class="card-icon card-icon--green">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+              </svg>
+            </div>
+            <h2 class="card-title">Lokasi</h2>
+            <label class="toggle-switch" aria-label="Aktifkan lokasi">
+              <input type="checkbox" id="toggle-location" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="card-body" id="location-body">
+            <div class="form-group">
+              <label class="form-label">Sumber Lokasi</label>
+              <div class="radio-group">
+                <label class="radio-option">
+                  <input type="radio" name="loc-mode" value="gps" id="loc-gps" checked />
+                  <span class="radio-label">GPS Perangkat</span>
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="loc-mode" value="exif" id="loc-exif" />
+                  <span class="radio-label">Dari EXIF foto</span>
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="loc-mode" value="coords" id="loc-coords" />
+                  <span class="radio-label">Input koordinat</span>
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="loc-mode" value="manual" id="loc-manual" />
+                  <span class="radio-label">Teks manual</span>
+                </label>
+              </div>
+            </div>
+            <div class="gps-status" id="gps-status">
+              <div class="gps-indicator" id="gps-indicator">
+                <span class="gps-dot"></span>
+                <span id="gps-label">Mendeteksi lokasi...</span>
+              </div>
+              <button class="btn-ghost btn-sm" id="btn-get-location">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+                Perbarui
+              </button>
+            </div>
+            <!-- Koordinat Input Panel -->
+            <div id="coords-input-group" style="display:none;">
+              <div class="form-row two-cols" style="margin-bottom:8px;">
+                <div class="form-group">
+                  <label class="form-label" for="coord-lat">Lintang (Lat)</label>
+                  <input type="number" id="coord-lat" class="form-input" placeholder="-6.2088" step="any" min="-90" max="90" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="coord-lng">Bujur (Lng)</label>
+                  <input type="number" id="coord-lng" class="form-input" placeholder="106.8456" step="any" min="-180" max="180" />
+                </div>
+              </div>
+              <div class="coord-format-hint">Format desimal. Cth: <span class="hint-mono">-6.2088, 106.8456</span></div>
+              <div class="coords-paste-row">
+                <input type="text" id="coord-paste" class="form-input" placeholder="Atau tempel: -6.2088, 106.8456" />
+              </div>
+              <div class="coord-actions">
+                <button class="btn-lookup" id="btn-coord-lookup">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  Cari Nama Lokasi
+                </button>
+                <button class="btn-coord-clear" id="btn-coord-clear" title="Reset koordinat">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+              <div class="coord-result" id="coord-result" style="display:none;">
+                <div class="coord-result-label">Nama Lokasi Ditemukan:</div>
+                <div class="coord-result-name" id="coord-result-name"></div>
+                <div class="coord-result-raw" id="coord-result-raw"></div>
+                <label class="coord-use-name">
+                  <input type="checkbox" id="coord-use-geocode" checked />
+                  <span>Gunakan nama lokasi (bukan koordinat)</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Teks Manual -->
+            <div class="form-group" id="manual-location-group" style="display:none;">
+              <label class="form-label" for="manual-location">Nama Lokasi Manual</label>
+              <input type="text" id="manual-location" class="form-input" placeholder="Cth: Jakarta, Indonesia" />
+            </div>
+
+            <!-- GPS coords display (from device GPS) -->
+            <div class="form-group" id="location-coords" style="display:none;">
+              <label class="form-label">Koordinat GPS Terdeteksi</label>
+              <div class="coords-display" id="coords-display">--</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="card-header">
+            <div class="card-icon card-icon--purple">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/>
+                <circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
+              </svg>
+            </div>
+            <h2 class="card-title">Gaya Watermark</h2>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label">Ukuran Font <span class="range-value" id="font-size-val">28px</span></label>
+              <input type="range" id="wm-font-size" class="range-input" min="10" max="80" value="28" />
+            </div>
+            <div class="form-row two-cols">
+              <div class="form-group">
+                <label class="form-label" for="wm-color">Warna Teks</label>
+                <div class="color-input-wrapper">
+                  <input type="color" id="wm-color" class="color-picker" value="#ffffff" />
+                  <span class="color-label" id="color-label">#ffffff</span>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="wm-bg-color">Warna BG</label>
+                <div class="color-input-wrapper">
+                  <input type="color" id="wm-bg-color" class="color-picker" value="#000000" />
+                  <span class="color-label" id="bg-color-label">#000000</span>
+                </div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Opasitas BG <span class="range-value" id="bg-opacity-val">60%</span></label>
+              <input type="range" id="wm-bg-opacity" class="range-input" min="0" max="100" value="60" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Preset Gaya</label>
+              <div class="style-presets" id="style-presets">
+                <button class="preset-btn active" data-preset="modern" id="preset-modern">Modern</button>
+                <button class="preset-btn" data-preset="classic" id="preset-classic">Klasik</button>
+                <button class="preset-btn" data-preset="minimal" id="preset-minimal">Minimal</button>
+                <button class="preset-btn" data-preset="stamp" id="preset-stamp">Stempel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Template Teks Watermark -->
+        <div class="settings-card">
+          <div class="card-header">
+            <div class="card-icon card-icon--teal">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/>
+              </svg>
+            </div>
+            <h2 class="card-title">Template Teks</h2>
+            <button class="btn-icon btn-template-reset" id="btn-template-reset" title="Reset ke default">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.4"/></svg>
+            </button>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label">
+                Token Otomatis
+                <span class="form-hint">klik untuk sisipkan</span>
+              </label>
+              <div class="token-pills">
+                <button class="token-pill" data-token="{tanggal}" title="Tanggal &amp; waktu sesuai pengaturan">{tanggal}</button>
+                <button class="token-pill" data-token="{lokasi}" title="Nama lokasi">{lokasi}</button>
+                <button class="token-pill" data-token="{koordinat}" title="Koordinat desimal">{koordinat}</button>
+                <button class="token-pill" data-token="{lat}" title="Lintang saja">{lat}</button>
+                <button class="token-pill" data-token="{lng}" title="Bujur saja">{lng}</button>
+                <button class="token-pill" data-token="{nama_file}" title="Nama file foto">{nama_file}</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="wm-template">
+                Teks Watermark
+                <span class="form-hint">1 baris = 1 baris di foto</span>
+              </label>
+              <textarea id="wm-template" class="form-textarea" rows="5" spellcheck="false" placeholder="Ketik teks atau gunakan token di atas...">{tanggal}
+&#128205; {lokasi}
+{koordinat}</textarea>
+              <div class="template-preview" id="template-preview"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="card-header">
+            <div class="card-icon card-icon--orange">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+              </svg>
+            </div>
+            <h2 class="card-title">Posisi &amp; Margin</h2>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label">Posisi Watermark</label>
+              <div class="position-grid" id="position-grid">
+                <button class="pos-btn" data-pos="top-left" id="pos-top-left">&#8598;</button>
+                <button class="pos-btn" data-pos="top-center" id="pos-top-center">&#8593;</button>
+                <button class="pos-btn" data-pos="top-right" id="pos-top-right">&#8599;</button>
+                <button class="pos-btn" data-pos="middle-left" id="pos-middle-left">&#8592;</button>
+                <button class="pos-btn" data-pos="center" id="pos-center">&#8853;</button>
+                <button class="pos-btn" data-pos="middle-right" id="pos-middle-right">&#8594;</button>
+                <button class="pos-btn active" data-pos="bottom-left" id="pos-bottom-left">&#8601;</button>
+                <button class="pos-btn" data-pos="bottom-center" id="pos-bottom-center">&#8595;</button>
+                <button class="pos-btn" data-pos="bottom-right" id="pos-bottom-right">&#8600;</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Margin Tepi <span class="range-value" id="margin-val">20px</span></label>
+              <input type="range" id="wm-margin" class="range-input" min="0" max="100" value="20" />
+            </div>
+          </div>
+        </div>
+
+      </div><!-- end settings-scroll -->
+
+      <div class="panel-footer">
+        <button class="btn-apply" id="btn-apply">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Terapkan Watermark
+        </button>
+      </div>
+
+    </aside>
+  </main>
+
+  <div class="toast-container" id="toast-container" aria-live="polite"></div>
+
+  <div class="download-overlay" id="download-overlay" style="display:none;" aria-hidden="true">
+    <div class="download-modal">
+      <div class="download-spinner"></div>
+      <p class="download-text">Memproses foto...</p>
+      <div class="download-bar-wrap">
+        <div class="download-bar" id="download-bar"></div>
+      </div>
+      <p class="download-sub" id="download-progress-text">0 / 0</p>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
