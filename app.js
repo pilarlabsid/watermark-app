@@ -95,7 +95,7 @@ function parseExifDate(str) {
 
 // ===== EXIF Reader (minimal, pure JS) =====
 function readExif(file) {
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = function(e) {
       const buf = e.target.result;
@@ -119,10 +119,13 @@ function readExif(file) {
             offset += 2 + view.getUint16(offset + 2);
           } else break;
         }
-      } catch(err) { /* ignore */ }
+      } catch(err) {
+        reject(new Error('Metadata EXIF foto rusak atau tidak valid.'));
+        return;
+      }
       resolve(exif);
     };
-    reader.onerror = () => resolve({});
+    reader.onerror = () => reject(new Error('Browser gagal membaca metadata EXIF foto.'));
     reader.readAsArrayBuffer(file.slice(0, 64 * 1024)); // read first 64KB
   });
 }
@@ -164,7 +167,9 @@ function parseExifIFD(view, exif) {
         parseGpsIFD(view, gpsOffset, exif, littleEndian);
       }
     }
-  } catch(e) { /* ignore */ }
+  } catch(e) {
+    throw e;
+  }
 }
 
 function parseGpsIFD(view, ifdOffset, exif, littleEndian) {
@@ -189,7 +194,9 @@ function parseGpsIFD(view, ifdOffset, exif, littleEndian) {
         if (tag === 4) exif.GPSLongitude = [toRat(ratOffset), toRat(ratOffset+8), toRat(ratOffset+16)];
       }
     }
-  } catch(e) { /* ignore */ }
+  } catch(e) {
+    throw e;
+  }
 }
 
 function gpsToDecimal(coords, ref) {
@@ -201,22 +208,33 @@ function gpsToDecimal(coords, ref) {
 
 // ===== Reverse Geocoding =====
 async function reverseGeocode(lat, lng) {
+  const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&accept-language=id`;
+  let res;
   try {
-    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&accept-language=id`;
-    const res = await fetch(url, { headers: { 'User-Agent': 'WatermarkPro/1.0' } });
-    const data = await res.json();
-    const a = data.address || {};
-    const parts = [
-      a.village || a.town || a.suburb || a.neighbourhood || a.city_district,
-      a.city || a.county || a.municipality,
-      a.state || a.region,
-      a.country
-    ].filter(Boolean);
-    // Limit to 3 most specific parts
-    return parts.slice(0, 3).join(', ');
-  } catch(e) {
-    return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    res = await fetch(url);
+  } catch {
+    throw new Error('Tidak dapat terhubung ke layanan lokasi. Periksa koneksi internet lalu coba lagi.');
   }
+  if (!res.ok) throw new Error(`Layanan nama lokasi merespons dengan status ${res.status}.`);
+
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error('Layanan lokasi mengirim jawaban yang tidak dapat dibaca.');
+  }
+  if (data.error) throw new Error(data.error);
+
+  const a = data.address || {};
+  const parts = [
+    a.village || a.town || a.suburb || a.neighbourhood || a.city_district,
+    a.city || a.county || a.municipality,
+    a.state || a.region,
+    a.country
+  ].filter(Boolean);
+  const name = parts.slice(0, 3).join(', ');
+  if (!name) throw new Error('Nama lokasi tidak ditemukan untuk koordinat ini.');
+  return name;
 }
 
 // ===== GPS Detection =====
@@ -243,40 +261,58 @@ async function fetchUserLocation() {
   dot.className = 'gps-dot';
   label.textContent = 'Mendeteksi lokasi...';
 
+  let pos;
   try {
-    const pos = await detectGPS();
-    const lat = pos.coords.latitude;
-    const lng = pos.coords.longitude;
-    state.location.lat = lat;
-    state.location.lng = lng;
-    state.location.source = 'gps';
+    pos = await detectGPS();
+  } catch(err) {
+    dot.classList.add('error');
+    const messages = {
+      1: 'Izin lokasi ditolak. Izinkan akses lokasi di pengaturan browser.',
+      2: 'Posisi tidak tersedia. Pastikan GPS/lokasi perangkat aktif.',
+      3: 'Deteksi lokasi melewati batas waktu. Coba lagi di area dengan sinyal lebih baik.',
+    };
+    const msg = err.code === 1 || err.code === 2 || err.code === 3
+      ? messages[err.code]
+      : err.message || 'Browser tidak dapat mengakses lokasi.';
+    label.textContent = msg;
+    state.location.text = null;
+    showToast(`Lokasi GPS gagal: ${msg} Gunakan mode manual atau koordinat.`, 'error');
+    return;
+  }
 
-    dot.classList.add('active');
-    label.textContent = 'Lokasi terdeteksi';
-    coordsGroup.style.display = 'flex';
-    coordsDiv.textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+  const lat = pos.coords.latitude;
+  const lng = pos.coords.longitude;
+  state.location.lat = lat;
+  state.location.lng = lng;
+  state.location.source = 'gps';
+  dot.classList.add('active');
+  coordsGroup.style.display = 'flex';
+  coordsDiv.textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
 
-    showToast('Mendeteksi nama lokasi...', 'info');
+  try {
     const locName = await reverseGeocode(lat, lng);
     state.location.text = locName;
     label.textContent = locName;
-    showToast(`📍 ${locName}`, 'success');
-
-    if (state.images.length > 0) renderWatermark();
+    showToast(`Lokasi ditemukan: ${locName}`, 'success');
   } catch(err) {
-    dot.classList.add('error');
-    const msg = err.code === 1 ? 'Akses lokasi ditolak' : 'Gagal mendeteksi lokasi';
-    label.textContent = msg;
-    state.location.text = null;
-    showToast(`⚠️ ${msg}. Gunakan mode manual.`, 'error');
+    state.location.text = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    label.textContent = 'Koordinat terdeteksi (nama lokasi gagal)';
+    showToast(`GPS berhasil, tetapi nama lokasi gagal: ${err.message} Watermark memakai koordinat.`, 'error');
+  }
+
+  if (state.images.length > 0) {
+    await renderWatermark();
   }
 }
 
 // ===== Image Loading =====
 async function loadImages(files) {
   const validFiles = [...files].filter(f => f.type.match(/^image\/(jpeg|png|webp)$/));
+  const unsupportedCount = files.length - validFiles.length;
+  if (unsupportedCount > 0) {
+    showToast(`${unsupportedCount} file dilewati: format tidak didukung. Gunakan JPG, PNG, atau WebP.`, 'error');
+  }
   if (validFiles.length === 0) {
-    showToast('Format tidak didukung. Gunakan JPG, PNG, atau WebP.', 'error');
     return;
   }
 
@@ -290,21 +326,51 @@ async function loadImages(files) {
 
   showToast(`Memuat ${okFiles.length} foto...`, 'info');
 
+  let loaded = 0;
+  const failed = [];
+  const metadataFailures = [];
   for (const file of okFiles) {
-    const img = new Image();
     const url = URL.createObjectURL(file);
-    await new Promise((res) => {
-      img.onload = res;
-      img.onerror = res;
-      img.src = url;
-    });
-    const exifData = await readExif(file);
-    state.images.push({ file, img, url, exifData });
+    try {
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = () => reject(new Error('Browser tidak dapat membaca gambar ini.'));
+        img.src = url;
+      });
+      let exifData = {};
+      try {
+        exifData = await readExif(file);
+      } catch(err) {
+        console.error(`Gagal membaca metadata EXIF ${file.name}:`, err);
+        metadataFailures.push(`${file.name}: ${err.message}`);
+      }
+      state.images.push({ file, img, url, exifData });
+      loaded++;
+    } catch(err) {
+      URL.revokeObjectURL(url);
+      console.error(`Gagal memuat ${file.name}:`, err);
+      failed.push(`${file.name}: ${err.message}`);
+    }
+  }
+
+  if (loaded === 0) {
+    showToast(`Gagal memuat foto: ${failed.join('; ')}`, 'error');
+    return;
   }
 
   state.currentIdx = 0;
   updateUI();
-  showToast(`${okFiles.length} foto berhasil dimuat!`, 'success');
+  if (failed.length > 0) {
+    showToast(`${loaded} foto dimuat; ${failed.length} gagal (${failed.join('; ')}).`, 'error');
+  } else {
+    showToast(`${loaded} foto berhasil dimuat!`, 'success');
+  }
+  if (metadataFailures.length > 0) {
+    const summary = metadataFailures.slice(0, 3).join('; ');
+    const remaining = metadataFailures.length > 3 ? `; dan ${metadataFailures.length - 3} lainnya` : '';
+    showToast(`Foto berhasil dimuat, tetapi metadata EXIF gagal dibaca: ${summary}${remaining}`, 'error');
+  }
 
   // Auto-detect GPS if mode = gps
   if (state.settings.locMode === 'gps' && !state.location.text) {
@@ -380,8 +446,14 @@ function getWatermarkDate(item) {
     date = new Date();
   } else if (dateMode === 'exif') {
     const exifDate = item.exifData?.DateTimeOriginal || item.exifData?.DateTime;
-    date = parseExifDate(exifDate) || new Date();
-    if (!exifDate) showToast('EXIF tidak ditemukan, menggunakan waktu sekarang.', 'info');
+    date = parseExifDate(exifDate);
+    if (!date) {
+      date = new Date();
+      if (!item.exifData._dateFallbackNotified) {
+        showToast(`Tanggal EXIF pada ${item.file.name} tidak ditemukan atau tidak valid; memakai waktu sekarang.`, 'info');
+        item.exifData._dateFallbackNotified = true;
+      }
+    }
   } else {
     date = customDate ? new Date(customDate) : new Date();
   }
@@ -405,9 +477,18 @@ async function getWatermarkLocation(item) {
     const lng = gpsToDecimal(ex?.GPSLongitude, ex?.GPSLongitudeRef);
     if (lat !== null && lng !== null) {
       if (!ex._geocoded) {
-        ex._geocoded = await reverseGeocode(lat, lng);
+        try {
+          ex._geocoded = await reverseGeocode(lat, lng);
+        } catch(err) {
+          ex._geocoded = formatCoordsDecimal(lat, lng);
+          notifyError(`Nama lokasi EXIF pada ${item.file.name} gagal dicari; watermark memakai koordinat`, err);
+        }
       }
       return ex._geocoded;
+    }
+    if (!ex._locationMissingNotified) {
+      showToast(`Koordinat GPS EXIF tidak ditemukan pada ${item.file.name}; watermark lokasi dikosongkan.`, 'info');
+      ex._locationMissingNotified = true;
     }
     return '';
   }
@@ -492,18 +573,22 @@ async function updateTemplatePreview() {
     ? state.images[state.currentIdx]
     : { file: { name: 'foto.jpg' }, exifData: {} };
 
-  const lines = await renderTemplate(tpl, dummyItem);
+  try {
+    const lines = await renderTemplate(tpl, dummyItem);
 
-  if (lines.length === 0) {
-    previewEl.innerHTML = '<div class="template-preview-empty">Tidak ada teks yang akan ditampilkan</div>';
-    return;
+    if (lines.length === 0) {
+      previewEl.innerHTML = '<div class="template-preview-empty">Tidak ada teks yang akan ditampilkan</div>';
+      return;
+    }
+    previewEl.innerHTML = lines.map((l, i) =>
+      `<div class="template-preview-line">
+         <span class="line-num">${i + 1}</span>
+         <span class="line-text">${escapeHtml(l)}</span>
+       </div>`
+    ).join('');
+  } catch(err) {
+    notifyError('Pratinjau template gagal diperbarui', err);
   }
-  previewEl.innerHTML = lines.map((l, i) =>
-    `<div class="template-preview-line">
-       <span class="line-num">${i + 1}</span>
-       <span class="line-text">${escapeHtml(l)}</span>
-     </div>`
-  ).join('');
 }
 
 function escapeHtml(str) {
@@ -595,9 +680,15 @@ async function drawWatermark(targetCanvas, targetCtx, item) {
 
 // ===== Render Watermark on Preview =====
 async function renderWatermark() {
-  if (state.images.length === 0) return;
+  if (state.images.length === 0) return false;
   const item = state.images[state.currentIdx];
-  await drawWatermark(canvas, ctx, item);
+  try {
+    await drawWatermark(canvas, ctx, item);
+    return true;
+  } catch(err) {
+    notifyError(`Watermark untuk ${item.file.name} gagal diterapkan`, err);
+    return false;
+  }
 }
 
 // ===== Helper: Rounded Rect =====
@@ -674,6 +765,7 @@ async function downloadAll() {
   downloadOverlay.style.display = 'flex';
   downloadOverlay.removeAttribute('aria-hidden');
   let failed = 0;
+  const failures = [];
   try {
     for (let i = 0; i < total; i++) {
       downloadProgressText.textContent = `${i + 1} / ${total}`;
@@ -682,8 +774,9 @@ async function downloadAll() {
       try {
         await downloadSingle(i);
       } catch (err) {
-        console.error(`Gagal mengunduh foto ${i + 1}:`, err);
+        console.error(`Gagal mengunduh ${state.images[i]?.file.name || `foto ${i + 1}`}:`, err);
         failed++;
+        failures.push(`${state.images[i]?.file.name || `foto ${i + 1}`}: ${err.message}`);
       }
       await new Promise(r => setTimeout(r, 200));
     }
@@ -697,7 +790,9 @@ async function downloadAll() {
   if (failed === 0) {
     showToast(`Unduhan dimulai untuk ${total} foto. Periksa folder unduhan.`, 'success');
   } else {
-    showToast(`${total - failed} foto berhasil diproses, ${failed} gagal diunduh.`, 'error');
+    const failureSummary = failures.slice(0, 3).join('; ');
+    const remaining = failures.length > 3 ? `; dan ${failures.length - 3} lainnya` : '';
+    showToast(`${total - failed} foto diproses, ${failed} gagal: ${failureSummary}${remaining}`, 'error');
   }
 }
 
@@ -711,12 +806,22 @@ function showToast(msg, type = 'info') {
     error: '<svg class="toast-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
     info: '<svg class="toast-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
   };
-  div.innerHTML = `${icons[type] || icons.info}<span>${msg}</span>`;
+  const icon = document.createElement('span');
+  icon.innerHTML = icons[type] || icons.info;
+  const message = document.createElement('span');
+  message.textContent = msg;
+  div.append(icon, message);
   tc.appendChild(div);
   setTimeout(() => {
     div.classList.add('hiding');
     div.addEventListener('animationend', () => div.remove());
-  }, 3000);
+  }, type === 'error' ? 8000 : 3000);
+}
+
+function notifyError(context, err) {
+  const detail = err instanceof Error ? err.message : String(err || 'Kesalahan tidak diketahui.');
+  console.error(`${context}:`, err);
+  showToast(`${context}: ${detail}`, 'error');
 }
 
 // ===== Bind Events =====
@@ -764,17 +869,21 @@ function bindEvents() {
       await downloadSingle(state.currentIdx);
       showToast('Unduhan dimulai. Periksa folder unduhan.', 'success');
     } catch (err) {
-      console.error('Gagal mengunduh foto:', err);
-      showToast('Gagal memproses unduhan foto. Coba lagi dengan foto berukuran lebih kecil.', 'error');
+      notifyError('Unduh foto gagal', err);
     }
   });
-  $('btn-download-all').addEventListener('click', downloadAll);
+  $('btn-download-all').addEventListener('click', async () => {
+    try {
+      await downloadAll();
+    } catch(err) {
+      notifyError('Proses unduh semua foto terhenti', err);
+    }
+  });
 
   // Apply
-  $('btn-apply').addEventListener('click', () => {
+  $('btn-apply').addEventListener('click', async () => {
     if (state.images.length === 0) { showToast('Upload foto terlebih dahulu!', 'error'); return; }
-    renderWatermark();
-    showToast('Watermark diterapkan!', 'success');
+    if (await renderWatermark()) showToast('Watermark diterapkan!', 'success');
   });
 
   // Date/Time settings
@@ -1044,7 +1153,7 @@ function bindCoordsMode() {
       showToast(`📍 ${name}`, 'success');
       if (state.images.length > 0) renderWatermark();
     } catch(err) {
-      showToast('Gagal mencari nama lokasi. Coba lagi.', 'error');
+      notifyError('Pencarian nama lokasi gagal', err);
     } finally {
       lookupBtn.disabled = false;
       lookupBtn.classList.remove('loading');
