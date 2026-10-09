@@ -212,7 +212,13 @@ function formatDetailedAddress(data) {
   const a = data.address || {};
   const parts = [];
 
-  // 1. Jalan & Nomor (Road / Street / Alley)
+  // Deteksi apakah wilayah DKI Jakarta
+  const isDKI = /jakarta/i.test(a.city || '') ||
+                /daerah khusus/i.test(a.city || '') ||
+                /jakarta/i.test(a.state || '') ||
+                /jakarta\s+(selatan|pusat|barat|timur|utara)|kepulauan\s+seribu/i.test(a.city_district || '');
+
+  // 1. Jalan & Nomor / POI / Blok / RW-RT
   const road = a.road || a.pedestrian || a.residential || a.street || a.footway || a.path || a.highway;
   if (road) {
     const houseNum = a.house_number ? ` No. ${a.house_number}` : '';
@@ -220,54 +226,70 @@ function formatDetailedAddress(data) {
   } else if (a.building || a.amenity || a.shop || a.tourism) {
     const poi = a.building || a.amenity || a.shop || a.tourism;
     if (typeof poi === 'string') parts.push(poi);
+  } else if (a.city_block || a.quarter) {
+    parts.push(a.city_block || a.quarter);
   }
 
   // 2. Kelurahan / Desa
-  const kel = a.village || a.hamlet || a.neighbourhood || (a.district && a.suburb ? a.suburb : '');
-  if (kel && !parts.some(p => p.toLowerCase().includes(kel.toLowerCase()))) {
-    parts.push(kel);
+  let rawKel = a.village || a.hamlet || '';
+  if (!rawKel && isDKI) rawKel = a.neighbourhood || '';
+  if (!rawKel && !isDKI && a.suburb && a.district) rawKel = a.suburb;
+
+  let kel = '';
+  if (rawKel) {
+    kel = /^(kel|kelurahan|desa)\b/i.test(rawKel) ? rawKel : `Kel. ${rawKel}`;
+    if (!parts.some(p => p.toLowerCase().includes(rawKel.toLowerCase()))) {
+      parts.push(kel);
+    }
   }
 
-  // 3. Kecamatan — city_district biasanya berisi nama kecamatan di kota Indonesia
-  let kec = a.subdistrict;
-  if (!kec && a.district && !/^(kota|kabupaten|kab\.)/i.test(a.district)) kec = a.district;
-  if (!kec && a.suburb && a.suburb !== kel) kec = a.suburb;
-  if (!kec && a.city_district) kec = a.city_district;
+  // 3. Kecamatan
+  let kec = '';
+  if (isDKI) {
+    // Di Jakarta: suburb atau district adalah KECAMATAN.
+    // city_district adalah KOTA ADMINISTRASI (Jakarta Selatan dll), bukan kecamatan!
+    kec = a.suburb || a.district || a.subdistrict || '';
+  } else {
+    // Di luar Jakarta: subdistrict / district / suburb / city_district adalah KECAMATAN
+    kec = a.subdistrict || '';
+    if (!kec && a.district && !/^(kota|kabupaten|kab\.)/i.test(a.district)) kec = a.district;
+    if (!kec && a.suburb && a.suburb.toLowerCase() !== (rawKel || '').toLowerCase()) kec = a.suburb;
+    if (!kec && a.city_district) kec = a.city_district;
+  }
+
+  // Fallback kecamatan dari display_name jika masih kosong
   if (!kec && data.display_name) {
     const dispParts = data.display_name.split(', ').map(s => s.trim());
-    const ref = kel || road;
+    const ref = rawKel || road;
     if (ref) {
       const idx = dispParts.indexOf(ref);
       if (idx !== -1 && idx + 1 < dispParts.length) {
         const nextPart = dispParts[idx + 1];
-        if (!/^(kota\s+|kabupaten\s+|daerah\s+|\d+$|indonesia)/i.test(nextPart)) kec = nextPart;
+        if (!/^(jakarta\s+|kota\s+|kabupaten\s+|daerah\s+|\d+$|indonesia)/i.test(nextPart)) {
+          kec = nextPart;
+        }
       }
     }
   }
 
-  if (kec && !parts.some(p => p.toLowerCase().includes(kec.toLowerCase()))) {
+  if (kec) {
     const formattedKec = /^(kec|kecamatan)\b/i.test(kec) ? kec : `Kec. ${kec}`;
     parts.push(formattedKec);
   }
 
-  // 4. Kabupaten / Kota — gunakan a.city atau a.county, TERLEPAS dari city_district
-  // city_district adalah kecamatan, bukan kota; city adalah kota/kabupaten
-  let kabKota = a.city || a.county || a.municipality;
-  // Khusus DKI Jakarta: a.city = "Daerah Khusus Ibukota Jakarta" (terlalu panjang), ganti ke nama walikota
-  if (/^daerah khusus ibukota jakarta$/i.test(kabKota || '')) {
-    // Gunakan city_district jika tidak sama dengan kec yang sudah ditambahkan
-    const altKab = a.city_district;
-    if (altKab && altKab !== kec) {
-      kabKota = altKab;
-    } else {
-      kabKota = 'DKI Jakarta';
-    }
+  // 4. Kabupaten / Kota
+  let kabKota = '';
+  if (isDKI) {
+    // Di DKI: city_district adalah Kota Administrasi (Jakarta Selatan, dll)
+    kabKota = a.city_district || '';
+    if (!kabKota && /jakarta/i.test(a.city || '')) kabKota = 'Jakarta';
+  } else {
+    kabKota = a.city || a.county || a.municipality || '';
   }
   if (kabKota) {
     const kabLower = kabKota.toLowerCase();
-    // Tidak dobel jika sudah sama persis dengan salah satu bagian yang sudah ada
     const alreadyIn = parts.some(p => {
-      const pClean = p.replace(/^kec\.\s*/i, '').toLowerCase();
+      const pClean = p.replace(/^(kec|kel)\.\s*/i, '').toLowerCase();
       return pClean === kabLower || p.toLowerCase() === kabLower;
     });
     if (!alreadyIn) {
@@ -276,12 +298,17 @@ function formatDetailedAddress(data) {
   }
 
   // 5. Provinsi
-  let prov = a.state || a.region || a.province;
-  if (prov) {
-    if (/daerah khusus ibukota jakarta/i.test(prov)) prov = 'DKI Jakarta';
+  let prov = a.state || a.region || a.province || '';
+  if (isDKI) {
+    prov = 'DKI Jakarta';
+  } else if (prov) {
     if (/daerah istimewa yogyakarta/i.test(prov)) prov = 'D.I. Yogyakarta';
+    if (/daerah khusus ibukota jakarta/i.test(prov)) prov = 'DKI Jakarta';
+  }
+  if (prov) {
     const provLower = prov.toLowerCase();
-    if (!parts.some(p => p.toLowerCase() === provLower)) {
+    const alreadyIn = parts.some(p => p.toLowerCase() === provLower);
+    if (!alreadyIn) {
       parts.push(prov);
     }
   }
