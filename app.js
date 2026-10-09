@@ -625,38 +625,80 @@ function hexToRgba(hex, alpha) {
 }
 
 // ===== Download Single =====
+function canvasToBlob(canvas, mime, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => {
+      if (blob) resolve(blob);
+      else reject(new Error('Browser gagal membuat file gambar.'));
+    }, mime, quality);
+  });
+}
+
 async function downloadSingle(idx) {
   const item = state.images[idx];
+  if (!item) throw new Error('Foto yang dipilih tidak tersedia.');
+
   const offCanvas = document.createElement('canvas');
   const offCtx = offCanvas.getContext('2d');
+  if (!offCtx) throw new Error('Browser tidak dapat memproses gambar.');
+
   await drawWatermark(offCanvas, offCtx, item);
   const ext = item.file.type === 'image/png' ? 'png' : 'jpg';
   const quality = item.file.type === 'image/png' ? 1 : 0.92;
   const mime = item.file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+  const blob = await canvasToBlob(offCanvas, mime, quality);
+  const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.download = item.file.name.replace(/\.[^.]+$/, '') + '_watermark.' + ext;
-  link.href = offCanvas.toDataURL(mime, quality);
-  link.click();
-  showToast('✅ Foto berhasil diunduh!', 'success');
+  link.href = url;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  try {
+    link.click();
+  } finally {
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    offCanvas.width = 0;
+    offCanvas.height = 0;
+  }
 }
 
 // ===== Download All =====
 async function downloadAll() {
+  const total = state.images.length;
+  if (total === 0) {
+    showToast('Upload foto terlebih dahulu!', 'error');
+    return;
+  }
+
   downloadOverlay.style.display = 'flex';
   downloadOverlay.removeAttribute('aria-hidden');
-  const total = state.images.length;
-  for (let i = 0; i < total; i++) {
-    downloadProgressText.textContent = `${i + 1} / ${total}`;
-    downloadBar.style.width = `${((i) / total) * 100}%`;
-    await new Promise(r => setTimeout(r, 50)); // allow repaint
-    await downloadSingle(i);
-    await new Promise(r => setTimeout(r, 200));
+  let failed = 0;
+  try {
+    for (let i = 0; i < total; i++) {
+      downloadProgressText.textContent = `${i + 1} / ${total}`;
+      downloadBar.style.width = `${(i / total) * 100}%`;
+      await new Promise(r => setTimeout(r, 50)); // allow repaint
+      try {
+        await downloadSingle(i);
+      } catch (err) {
+        console.error(`Gagal mengunduh foto ${i + 1}:`, err);
+        failed++;
+      }
+      await new Promise(r => setTimeout(r, 200));
+    }
+  } finally {
+    downloadBar.style.width = '100%';
+    await new Promise(r => setTimeout(r, 400));
+    downloadOverlay.style.display = 'none';
+    downloadOverlay.setAttribute('aria-hidden', 'true');
   }
-  downloadBar.style.width = '100%';
-  await new Promise(r => setTimeout(r, 400));
-  downloadOverlay.style.display = 'none';
-  downloadOverlay.setAttribute('aria-hidden', 'true');
-  showToast(`✅ ${total} foto berhasil diunduh!`, 'success');
+
+  if (failed === 0) {
+    showToast(`Unduhan dimulai untuk ${total} foto. Periksa folder unduhan.`, 'success');
+  } else {
+    showToast(`${total - failed} foto berhasil diproses, ${failed} gagal diunduh.`, 'error');
+  }
 }
 
 // ===== Toast =====
@@ -717,7 +759,15 @@ function bindEvents() {
   });
 
   // Download
-  $('btn-download-single').addEventListener('click', () => downloadSingle(state.currentIdx));
+  $('btn-download-single').addEventListener('click', async () => {
+    try {
+      await downloadSingle(state.currentIdx);
+      showToast('Unduhan dimulai. Periksa folder unduhan.', 'success');
+    } catch (err) {
+      console.error('Gagal mengunduh foto:', err);
+      showToast('Gagal memproses unduhan foto. Coba lagi dengan foto berukuran lebih kecil.', 'error');
+    }
+  });
   $('btn-download-all').addEventListener('click', downloadAll);
 
   // Apply
