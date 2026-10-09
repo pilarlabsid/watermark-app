@@ -206,35 +206,150 @@ function gpsToDecimal(coords, ref) {
   return val;
 }
 
+// ===== Format Detailed Address =====
+function formatDetailedAddress(data) {
+  if (!data) return '';
+  const a = data.address || {};
+  const parts = [];
+
+  // 1. Jalan & Nomor (Road / Street / Alley)
+  const road = a.road || a.pedestrian || a.residential || a.street || a.footway || a.path || a.highway;
+  if (road) {
+    const houseNum = a.house_number ? ` No. ${a.house_number}` : '';
+    parts.push(`${road}${houseNum}`);
+  } else if (a.building || a.amenity || a.shop || a.tourism) {
+    const poi = a.building || a.amenity || a.shop || a.tourism;
+    if (typeof poi === 'string') parts.push(poi);
+  }
+
+  // 2. Kelurahan / Desa
+  const kel = a.village || a.hamlet || a.neighbourhood || (a.district && a.suburb ? a.suburb : '');
+  if (kel && !parts.some(p => p.toLowerCase().includes(kel.toLowerCase()))) {
+    parts.push(kel);
+  }
+
+  // 3. Kecamatan — city_district biasanya berisi nama kecamatan di kota Indonesia
+  let kec = a.subdistrict;
+  if (!kec && a.district && !/^(kota|kabupaten|kab\.)/i.test(a.district)) kec = a.district;
+  if (!kec && a.suburb && a.suburb !== kel) kec = a.suburb;
+  if (!kec && a.city_district) kec = a.city_district;
+  if (!kec && data.display_name) {
+    const dispParts = data.display_name.split(', ').map(s => s.trim());
+    const ref = kel || road;
+    if (ref) {
+      const idx = dispParts.indexOf(ref);
+      if (idx !== -1 && idx + 1 < dispParts.length) {
+        const nextPart = dispParts[idx + 1];
+        if (!/^(kota\s+|kabupaten\s+|daerah\s+|\d+$|indonesia)/i.test(nextPart)) kec = nextPart;
+      }
+    }
+  }
+
+  if (kec && !parts.some(p => p.toLowerCase().includes(kec.toLowerCase()))) {
+    const formattedKec = /^(kec|kecamatan)\b/i.test(kec) ? kec : `Kec. ${kec}`;
+    parts.push(formattedKec);
+  }
+
+  // 4. Kabupaten / Kota — gunakan a.city atau a.county, TERLEPAS dari city_district
+  // city_district adalah kecamatan, bukan kota; city adalah kota/kabupaten
+  let kabKota = a.city || a.county || a.municipality;
+  // Khusus DKI Jakarta: a.city = "Daerah Khusus Ibukota Jakarta" (terlalu panjang), ganti ke nama walikota
+  if (/^daerah khusus ibukota jakarta$/i.test(kabKota || '')) {
+    // Gunakan city_district jika tidak sama dengan kec yang sudah ditambahkan
+    const altKab = a.city_district;
+    if (altKab && altKab !== kec) {
+      kabKota = altKab;
+    } else {
+      kabKota = 'DKI Jakarta';
+    }
+  }
+  if (kabKota) {
+    const kabLower = kabKota.toLowerCase();
+    // Tidak dobel jika sudah sama persis dengan salah satu bagian yang sudah ada
+    const alreadyIn = parts.some(p => {
+      const pClean = p.replace(/^kec\.\s*/i, '').toLowerCase();
+      return pClean === kabLower || p.toLowerCase() === kabLower;
+    });
+    if (!alreadyIn) {
+      parts.push(kabKota);
+    }
+  }
+
+  // 5. Provinsi
+  let prov = a.state || a.region || a.province;
+  if (prov) {
+    if (/daerah khusus ibukota jakarta/i.test(prov)) prov = 'DKI Jakarta';
+    if (/daerah istimewa yogyakarta/i.test(prov)) prov = 'D.I. Yogyakarta';
+    const provLower = prov.toLowerCase();
+    if (!parts.some(p => p.toLowerCase() === provLower)) {
+      parts.push(prov);
+    }
+  }
+
+  if (parts.length > 0) {
+    return parts.join(', ');
+  }
+
+  if (data.display_name) {
+    return data.display_name.split(', ').slice(0, 5).join(', ');
+  }
+  return '';
+}
+
 // ===== Reverse Geocoding =====
 async function reverseGeocode(lat, lng) {
-  const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&accept-language=id`;
-  let res;
+  // Nominatim dengan zoom 18 & addressdetails untuk level jalan & bangunan
+  const nominatimUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=id`;
   try {
-    res = await fetch(url);
-  } catch {
-    throw new Error('Tidak dapat terhubung ke layanan lokasi. Periksa koneksi internet lalu coba lagi.');
+    const res = await fetch(nominatimUrl, { headers: { 'Accept': 'application/json' } });
+    if (res.ok) {
+      const data = await res.json();
+      if (!data.error) {
+        const detailedName = formatDetailedAddress(data);
+        if (detailedName) return detailedName;
+      }
+    }
+  } catch (err) {
+    console.warn('Nominatim reverse geocode gagal, mencoba layanan cadangan:', err);
   }
-  if (!res.ok) throw new Error(`Layanan nama lokasi merespons dengan status ${res.status}.`);
 
-  let data;
+  // Layanan cadangan: BigDataCloud Reverse Geocoding
   try {
-    data = await res.json();
-  } catch {
-    throw new Error('Layanan lokasi mengirim jawaban yang tidak dapat dibaca.');
-  }
-  if (data.error) throw new Error(data.error);
+    const bdcUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=id`;
+    const res = await fetch(bdcUrl);
+    if (res.ok) {
+      const bdcData = await res.json();
+      const admin = bdcData.localityInfo?.administrative || [];
+      const parts = [];
 
-  const a = data.address || {};
-  const parts = [
-    a.village || a.town || a.suburb || a.neighbourhood || a.city_district,
-    a.city || a.county || a.municipality,
-    a.state || a.region,
-    a.country
-  ].filter(Boolean);
-  const name = parts.slice(0, 3).join(', ');
-  if (!name) throw new Error('Nama lokasi tidak ditemukan untuk koordinat ini.');
-  return name;
+      if (bdcData.locality) {
+        parts.push(`Kec. ${bdcData.locality}`);
+      }
+
+      const kab = admin.find(a => a.adminLevel === 5 || /kabupaten|kota/i.test(a.description || ''));
+      if (kab) {
+        parts.push(kab.name);
+      } else if (bdcData.city) {
+        parts.push(bdcData.city);
+      }
+
+      const prov = admin.find(a => a.adminLevel === 4);
+      if (prov) {
+        let provName = prov.name;
+        if (/jakarta/i.test(provName)) provName = 'DKI Jakarta';
+        parts.push(provName);
+      } else if (bdcData.principalSubdivision) {
+        parts.push(bdcData.principalSubdivision);
+      }
+
+      const bdcResult = parts.join(', ');
+      if (bdcResult) return bdcResult;
+    }
+  } catch (err) {
+    console.warn('BigDataCloud reverse geocode gagal:', err);
+  }
+
+  throw new Error('Nama lokasi tidak ditemukan untuk koordinat ini.');
 }
 
 // ===== GPS Detection =====
