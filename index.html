@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=2" />
 </head>
 <body>
   <header class="header">
@@ -47,7 +47,7 @@
       </div>
 
       <div class="dropzone" id="dropzone" role="region" aria-label="Area upload foto">
-        <input type="file" id="file-input" class="dropzone-file-input" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.HEIC,.jpg,.jpeg,.png,.webp,image/*" multiple aria-label="Pilih foto dari perangkat" />
+        <input type="file" id="file-input" class="dropzone-file-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:10;margin:0;padding:0;display:block;" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.HEIC,.jpg,.jpeg,.png,.webp,image/*" multiple aria-label="Pilih foto dari perangkat" />
         <div class="dropzone-content" id="dropzone-content">
           <div class="dropzone-icon">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -57,7 +57,7 @@
           </div>
           <p class="dropzone-title">Seret &amp; Lepas Foto</p>
           <p class="dropzone-sub">atau <span class="btn-link" id="btn-browse">pilih dari perangkat</span></p>
-          <p class="dropzone-hint">JPG, PNG, WebP, HEIC &bull; Maksimal 50MB per file &bull; Bisa pilih banyak foto</p>
+          <p class="dropzone-hint">JPG, PNG, WebP, HEIC &bull; Maksimal 50MB</p>
         </div>
       </div>
 
@@ -381,7 +381,7 @@
     <div class="help-dialog-content">
       <p>Tambahkan watermark tanggal, waktu, dan lokasi ke foto. Atur tampilannya, lalu pilih <strong>Terapkan Watermark</strong> sebelum mengunduh.</p>
       <ul>
-        <li>Format yang didukung: JPG/JPEG, PNG, WebP, dan HEIC (iPhone).</li>
+        <li>Format yang didukung: JPG/JPEG, PNG, WebP, dan HEIC.</li>
         <li>Maksimal ukuran foto adalah 50 MB per file. File yang lebih besar akan dilewati.</li>
         <li>Foto diproses langsung di browser dan tidak diunggah ke server.</li>
         <li>Pilih <strong>Unduh Foto Ini</strong> untuk satu foto. <strong>Unduh Semua</strong> memproses foto satu per satu; browser mobile mungkin meminta izin atau membatasi unduhan berulang.</li>
@@ -403,6 +403,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=2"></script>
 </body>
 </html>
