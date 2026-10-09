@@ -305,54 +305,128 @@ async function fetchUserLocation() {
   }
 }
 
+// ===== Supported Image Check =====
+function isSupportedImage(file) {
+  if (!file) return false;
+  const type = (file.type || '').toLowerCase();
+  // Standard MIME types including HEIC/HEIF and JPEG variants
+  if (/^image\/(jpeg|jpg|png|webp|heic|heif)$/.test(type)) return true;
+  // If type is empty or generic (common on iOS when picking from Files or iCloud)
+  const name = (file.name || '').toLowerCase();
+  if (/\.(jpe?g|png|webp|heic|heif)$/.test(name)) return true;
+  // Fallback for any image/* type
+  if (type.startsWith('image/')) return true;
+  return false;
+}
+
 // ===== Image Loading =====
 async function loadImages(files) {
-  const validFiles = [...files].filter(f => f.type.match(/^image\/(jpeg|png|webp)$/));
-  const unsupportedCount = files.length - validFiles.length;
+  if (!files || files.length === 0) return;
+
+  const fileList = Array.from(files);
+  const validFiles = fileList.filter(isSupportedImage);
+  const unsupportedCount = fileList.length - validFiles.length;
+
   if (unsupportedCount > 0) {
-    showToast(`${unsupportedCount} file dilewati: format tidak didukung. Gunakan JPG, PNG, atau WebP.`, 'error');
+    showToast(`${unsupportedCount} file dilewati: format tidak didukung. Gunakan JPG, PNG, WebP, atau HEIC.`, 'error');
   }
+
   if (validFiles.length === 0) {
+    if (unsupportedCount === 0) {
+      showToast('Tidak ada file foto yang dipilih.', 'error');
+    }
+    fileInput.value = '';
     return;
   }
 
-  const oversized = validFiles.filter(f => f.size > 20 * 1024 * 1024);
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB (mendukung foto 48MP iPhone)
+  const oversized = validFiles.filter(f => f.size > MAX_FILE_SIZE);
   if (oversized.length > 0) {
-    showToast(`${oversized.length} file melebihi 20MB dan dilewati.`, 'error');
+    showToast(`${oversized.length} file melebihi 50MB dan dilewati.`, 'error');
   }
 
-  const okFiles = validFiles.filter(f => f.size <= 20 * 1024 * 1024);
-  if (okFiles.length === 0) return;
+  const okFiles = validFiles.filter(f => f.size <= MAX_FILE_SIZE);
+  if (okFiles.length === 0) {
+    fileInput.value = '';
+    return;
+  }
 
   showToast(`Memuat ${okFiles.length} foto...`, 'info');
 
   let loaded = 0;
   const failed = [];
   const metadataFailures = [];
-  for (const file of okFiles) {
-    const url = URL.createObjectURL(file);
+
+  for (const rawFile of okFiles) {
+    let file = rawFile;
+    let url = null;
+    let img = new Image();
+
     try {
-      const img = new Image();
-      await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = () => reject(new Error('Browser tidak dapat membaca gambar ini.'));
-        img.src = url;
-      });
+      const isHeic = (file.type && /heic|heif/i.test(file.type)) || /\.(heic|heif)$/i.test(file.name);
+
+      if (isHeic) {
+        let nativeLoaded = false;
+        try {
+          const testUrl = URL.createObjectURL(file);
+          await new Promise((resolve, reject) => {
+            img.onload = () => { nativeLoaded = true; resolve(); };
+            img.onerror = () => reject(new Error('Browser tidak mendukung decode HEIC secara langsung.'));
+            img.src = testUrl;
+          });
+          url = testUrl;
+        } catch {
+          // Fallback to heic2any for conversion
+          if (typeof heic2any === 'function') {
+            showToast(`Mengonversi foto HEIC (${file.name})...`, 'info');
+            const converted = await heic2any({
+              blob: file,
+              toType: 'image/jpeg',
+              quality: 0.92
+            });
+            const convBlob = Array.isArray(converted) ? converted[0] : converted;
+            const newName = file.name.replace(/\.(heic|heif)$/i, '.jpg');
+            file = new File([convBlob], newName, { type: 'image/jpeg' });
+
+            url = URL.createObjectURL(convBlob);
+            img = new Image();
+            await new Promise((resolve, reject) => {
+              img.onload = resolve;
+              img.onerror = () => reject(new Error('Browser gagal menampilkan gambar hasil konversi HEIC.'));
+              img.src = url;
+            });
+          } else {
+            throw new Error('Format HEIC memerlukan browser Safari terbaru atau pustaka konversi.');
+          }
+        }
+      } else {
+        url = URL.createObjectURL(file);
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = () => reject(new Error('Browser tidak dapat membaca gambar ini.'));
+          img.src = url;
+        });
+      }
+
       let exifData = {};
       try {
-        exifData = await readExif(file);
-      } catch(err) {
-        console.error(`Gagal membaca metadata EXIF ${file.name}:`, err);
-        metadataFailures.push(`${file.name}: ${err.message}`);
+        exifData = await readExif(rawFile);
+      } catch (err) {
+        console.error(`Gagal membaca metadata EXIF ${rawFile.name}:`, err);
+        metadataFailures.push(`${rawFile.name}: ${err.message}`);
       }
+
       state.images.push({ file, img, url, exifData });
       loaded++;
-    } catch(err) {
-      URL.revokeObjectURL(url);
-      console.error(`Gagal memuat ${file.name}:`, err);
-      failed.push(`${file.name}: ${err.message}`);
+    } catch (err) {
+      if (url) URL.revokeObjectURL(url);
+      console.error(`Gagal memuat ${rawFile.name}:`, err);
+      failed.push(`${rawFile.name}: ${err.message}`);
     }
   }
+
+  // Reset fileInput value so picking the same file again triggers change event
+  fileInput.value = '';
 
   if (loaded === 0) {
     showToast(`Gagal memuat foto: ${failed.join('; ')}`, 'error');
@@ -448,9 +522,13 @@ function getWatermarkDate(item) {
     const exifDate = item.exifData?.DateTimeOriginal || item.exifData?.DateTime;
     date = parseExifDate(exifDate);
     if (!date) {
-      date = new Date();
+      if (item.file?.lastModified) {
+        date = new Date(item.file.lastModified);
+      } else {
+        date = new Date();
+      }
       if (!item.exifData._dateFallbackNotified) {
-        showToast(`Tanggal EXIF pada ${item.file.name} tidak ditemukan atau tidak valid; memakai waktu sekarang.`, 'info');
+        showToast(`Tanggal EXIF pada ${item.file.name} tidak ditemukan; memakai waktu file/sekarang.`, 'info');
         item.exifData._dateFallbackNotified = true;
       }
     }
@@ -827,21 +905,20 @@ function notifyError(context, err) {
 // ===== Bind Events =====
 function bindEvents() {
   // File upload
-  $('btn-browse').addEventListener('click', () => fileInput.click());
-  fileInput.addEventListener('change', e => loadImages(e.target.files));
+  fileInput.addEventListener('change', e => {
+    if (e.target.files && e.target.files.length > 0) {
+      loadImages(e.target.files);
+    }
+  });
 
-  dropzone.addEventListener('click', () => {
-    if (state.images.length === 0) fileInput.click();
-  });
-  dropzone.addEventListener('keydown', e => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
-  });
   dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
   dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
   dropzone.addEventListener('drop', e => {
     e.preventDefault();
     dropzone.classList.remove('drag-over');
-    loadImages(e.dataTransfer.files);
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      loadImages(e.dataTransfer.files);
+    }
   });
 
   // Navigation

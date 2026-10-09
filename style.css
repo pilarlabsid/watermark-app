@@ -141,9 +141,21 @@ body {
   transition: all 0.25s ease;
   background: var(--bg-card);
   position: relative;
+  overflow: hidden;
 }
 
-.dropzone:hover, .dropzone:focus {
+.dropzone-file-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 10;
+  display: block;
+}
+
+.dropzone:hover, .dropzone:focus, .dropzone:focus-within {
   border-color: var(--accent-blue);
   background: rgba(59,130,246,0.05);
   outline: none;
@@ -163,6 +175,7 @@ body {
   gap: 8px;
   text-align: center;
   padding: 32px;
+  pointer-events: none;
 }
 
 .dropzone-icon {
@@ -669,12 +682,13 @@ body {
 /* ===== Toast ===== */
 .toast-container {
   position: fixed;
-  bottom: 24px;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
   right: 24px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   z-index: 1000;
+  pointer-events: none;
 }
 
 .toast {
@@ -690,9 +704,10 @@ body {
   font-weight: 500;
   box-shadow: var(--card-shadow);
   animation: slideIn 0.3s ease;
-  max-width: 320px;
+  max-width: 340px;
   min-width: 200px;
   overflow-wrap: anywhere;
+  pointer-events: auto;
 }
 .toast.success { border-color: rgba(16,185,129,0.4); }
 .toast.error { border-color: rgba(239,68,68,0.4); }
@@ -700,8 +715,30 @@ body {
 .toast-icon { flex-shrink: 0; }
 
 @media (max-width: 600px) {
-  .toast-container { left: 12px; right: 12px; bottom: 12px; }
-  .toast { width: 100%; max-width: none; min-width: 0; }
+  .toast-container {
+    left: 16px;
+    right: 16px;
+    top: calc(16px + env(safe-area-inset-top, 0px));
+    bottom: auto;
+  }
+  .toast {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    animation: toastSlideDown 0.3s ease;
+  }
+  .toast.hiding {
+    animation: toastSlideUp 0.3s ease forwards;
+  }
+}
+
+@keyframes toastSlideDown {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes toastSlideUp {
+  from { transform: translateY(0); opacity: 1; }
+  to { transform: translateY(-20px); opacity: 0; }
 }
 
 @keyframes slideIn {

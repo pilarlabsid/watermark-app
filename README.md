@@ -36,7 +36,7 @@ Aplikasi web modern, cepat, dan aman untuk membubuhkan cap air (*watermark*) inf
   - Kontrol ukuran font, warna teks, warna latar belakang (badge), serta opasitas transparansi latar belakang.
   - 9 posisi peletakan watermark (grid 3×3) dan pengaturan margin tepi.
 - 📁 **Dukungan Batch Processing (Banyak Foto Sekaligus)**:
-  - Drag-and-drop atau pilih banyak foto sekaligus (JPG, PNG, WebP hingga 20 MB per file).
+  - Drag-and-drop atau pilih banyak foto sekaligus (JPG, PNG, WebP, HEIC hingga 50 MB per file).
   - Pratinjau navigasi foto dan strip thumbnail.
   - Opsi *Unduh Foto Ini* atau *Unduh Semua* dengan progress modal.
 - 📱 **Responsif & Ringan**:
