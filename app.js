@@ -937,9 +937,10 @@ function bindEvents() {
   });
 
   // Help button
-  $('btn-help').addEventListener('click', () => {
-    showToast('WatermarkPro v1.0 — Buat watermark tanggal, jam & lokasi di foto Anda. Semua proses dilakukan di browser, foto Anda tidak dikirim ke server.', 'info');
-  });
+  const helpDialog = $('help-dialog');
+  $('btn-help').addEventListener('click', () => helpDialog.showModal());
+  $('btn-close-help').addEventListener('click', () => helpDialog.close());
+  $('btn-help-done').addEventListener('click', () => helpDialog.close());
 
   // Paste from clipboard (only images, ignore if coord-paste is focused)
   document.addEventListener('paste', e => {

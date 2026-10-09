@@ -373,6 +373,24 @@
 
   <div class="toast-container" id="toast-container" aria-live="polite"></div>
 
+  <dialog class="help-dialog" id="help-dialog" aria-labelledby="help-title">
+    <div class="help-dialog-header">
+      <h2 id="help-title">Bantuan WatermarkPro</h2>
+      <button class="btn-icon" id="btn-close-help" type="button" aria-label="Tutup bantuan">&times;</button>
+    </div>
+    <div class="help-dialog-content">
+      <p>Tambahkan watermark tanggal, waktu, dan lokasi ke foto. Atur tampilannya, lalu pilih <strong>Terapkan Watermark</strong> sebelum mengunduh.</p>
+      <ul>
+        <li>Format yang didukung: JPG/JPEG, PNG, dan WebP.</li>
+        <li>Maksimal ukuran foto adalah 20 MB per file. File yang lebih besar akan dilewati.</li>
+        <li>Foto diproses langsung di browser dan tidak diunggah ke server.</li>
+        <li>Pilih <strong>Unduh Foto Ini</strong> untuk satu foto. <strong>Unduh Semua</strong> memproses foto satu per satu; browser mobile mungkin meminta izin atau membatasi unduhan berulang.</li>
+        <li>Jika hasil tidak terlihat, periksa daftar unduhan browser atau folder Unduhan/Files di perangkat. Coba unduh satu foto terlebih dahulu jika unduhan banyak gagal.</li>
+      </ul>
+    </div>
+    <button class="btn-primary help-dialog-close" id="btn-help-done" type="button">Mengerti</button>
+  </dialog>
+
   <div class="download-overlay" id="download-overlay" style="display:none;" aria-hidden="true">
     <div class="download-modal">
       <div class="download-spinner"></div>

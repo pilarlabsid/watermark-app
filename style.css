@@ -99,6 +99,7 @@ body {
   overflow-y: auto;
   background: var(--bg-base);
   min-height: 0;      /* grid item: prevent growing beyond grid area */
+  padding-bottom: 40px; /* Safe area padding at the bottom */
 }
 
 .section-header {
@@ -206,6 +207,7 @@ body {
   border-radius: var(--radius);
   padding: 16px;
   border: 1px solid var(--border);
+  flex-shrink: 0; /* Prevents being crushed when content exceeds height */
 }
 
 .canvas-nav {
@@ -243,8 +245,10 @@ body {
   gap: 8px;
   overflow-x: auto;
   padding: 4px;
+  padding-bottom: 12px; /* Extra padding to prevent scrollbar hiding content */
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
+  flex-shrink: 0; /* Ensures thumbnail strip is fully visible */
 }
 
 .thumb-item {
@@ -703,6 +707,27 @@ body {
   to { transform: translateX(100%); opacity: 0; }
 }
 .toast.hiding { animation: slideOut 0.3s ease forwards; }
+
+/* ===== Help Dialog ===== */
+.help-dialog {
+  width: min(520px, calc(100% - 32px));
+  max-height: min(80vh, 620px);
+  margin: auto;
+  padding: 24px;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--card-shadow);
+}
+.help-dialog::backdrop { background: rgba(0,0,0,0.72); backdrop-filter: blur(4px); }
+.help-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.help-dialog-header h2 { font-size: 1.15rem; }
+.help-dialog-content { margin: 16px 0 20px; color: var(--text-secondary); line-height: 1.65; }
+.help-dialog-content ul { padding-left: 20px; margin-top: 12px; }
+.help-dialog-content li + li { margin-top: 8px; }
+.help-dialog-content strong { color: var(--text-primary); }
+.help-dialog-close { width: 100%; justify-content: center; }
 
 /* ===== Download Overlay ===== */
 .download-overlay {
